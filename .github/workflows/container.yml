@@ -45,6 +45,8 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=sha-
             type=semver,pattern=v{{version}}
+            # Rolling tip of main (push to main only; PRs build but do not push)
+            type=raw,value=devel,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') && !contains(github.ref, 'rc') }}
 
       - name: Extract version for labels

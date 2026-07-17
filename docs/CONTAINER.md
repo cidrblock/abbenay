@@ -15,7 +15,10 @@ and on every release tag.
 # Latest stable release
 podman pull ghcr.io/redhat-developer/abbenay:latest
 
-# Latest from main (development builds)
+# Tip of main (published on every push to main)
+podman pull ghcr.io/redhat-developer/abbenay:devel
+
+# Same build, tagged by branch name
 podman pull ghcr.io/redhat-developer/abbenay:main
 
 # Specific release
