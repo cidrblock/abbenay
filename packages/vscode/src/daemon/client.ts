@@ -876,7 +876,8 @@ export class DaemonClient {
   async startWebServer(port?: number): Promise<proto.StartWebServerResponse> {
     const client = this.getClient();
     const config = readDaemonConnectionConfig();
-    return client.startWebServer({ port: port ?? dashboardPortForMode(config.mode) });
+    const selectedPort = port ?? dashboardPortForMode(config.mode);
+    return client.startWebServer({ port: selectedPort });
   }
 
   /**

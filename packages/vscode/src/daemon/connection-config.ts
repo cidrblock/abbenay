@@ -10,9 +10,9 @@ export const GRPC_TLS_DEFAULT_CN = 'abbenay-grpc';
 export const DEFAULT_DASHBOARD_PORT = 8787;
 export const EMBEDDED_DASHBOARD_PORT = 8788;
 
-/** Select a local HTTP dashboard port that does not collide with the standalone daemon. */
+/** Select an HTTP dashboard port; zero asks the daemon to reuse or choose its default. */
 export function dashboardPortForMode(mode: DaemonMode): number {
-  return mode === 'embedded' ? EMBEDDED_DASHBOARD_PORT : DEFAULT_DASHBOARD_PORT;
+  return mode === 'embedded' ? EMBEDDED_DASHBOARD_PORT : 0;
 }
 
 export function dashboardUrlForConnection(

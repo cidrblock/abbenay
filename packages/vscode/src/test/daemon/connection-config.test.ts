@@ -46,11 +46,11 @@ suite('connection-config', () => {
     assert.strictEqual(normalizeDaemonAddress('[::1]:8787'), undefined);
   });
 
-  test('embedded mode uses a dashboard port distinct from the standalone daemon', () => {
+  test('dashboard port selection reserves a distinct embedded port and leaves local defaults unspecified', () => {
     assert.strictEqual(dashboardPortForMode('embedded'), EMBEDDED_DASHBOARD_PORT);
     assert.notStrictEqual(EMBEDDED_DASHBOARD_PORT, DEFAULT_DASHBOARD_PORT);
-    assert.strictEqual(dashboardPortForMode('auto'), DEFAULT_DASHBOARD_PORT);
-    assert.strictEqual(dashboardPortForMode('standalone'), DEFAULT_DASHBOARD_PORT);
+    assert.strictEqual(dashboardPortForMode('auto'), 0);
+    assert.strictEqual(dashboardPortForMode('standalone'), 0);
   });
 
   test('dashboardUrlForConnection preserves the selected remote daemon endpoint', () => {
