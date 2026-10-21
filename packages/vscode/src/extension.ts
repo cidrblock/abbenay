@@ -30,7 +30,7 @@ let reconnectPending = false;
 /** Dashboard URL: same host as remote gRPC when configured, else localhost. */
 function resolveDashboardUrl(): string {
   const cfg = readDaemonConnectionConfig();
-  return dashboardUrlFromDaemonAddress(cfg.address) || DEFAULT_DASHBOARD_URL;
+  return (cfg.isRemote ? dashboardUrlFromDaemonAddress(cfg.address) : undefined) || DEFAULT_DASHBOARD_URL;
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -97,7 +97,12 @@ async function startDaemonServices(
 ): Promise<boolean> {
   const { showError = true } = options;
   const logger = getLogger();
-  const mode = describeConnectionMode(readDaemonConnectionConfig());
+  const config = readDaemonConnectionConfig();
+  const mode = describeConnectionMode(config);
+  if (config.mode === 'disabled') {
+    logger.info('[Daemon] Disabled by abbenay.daemonMode; skipping connection and language-model registration.');
+    return false;
+  }
 
   try {
     logger.info(`[Daemon] Connecting to Abbenay daemon (${mode})...`);
@@ -200,24 +205,27 @@ async function reconnectDaemonServices(context: vscode.ExtensionContext): Promis
   try {
     do {
       reconnectPending = false;
-      const mode = describeConnectionMode(readDaemonConnectionConfig());
-      logger.info(`[Daemon] Connection settings changed — reconnecting (${mode})...`);
+      logger.info('[Daemon] Connection settings changed — reconnecting...');
 
       try {
         await stopDaemonServices();
 
+        const config = readDaemonConnectionConfig();
+        const mode = describeConnectionMode(config);
         const client = getDaemonClient();
         // Always close — clears orphaned half-open channels too.
         await client.close();
 
         const ok = await startDaemonServices(context, { showError: false });
-        if (ok) {
+        if (config.mode === 'disabled') {
+          logger.info('[Daemon] Disabled; disconnected from the daemon.');
+        } else if (ok) {
           vscode.window.showInformationMessage(
             `Abbenay: Reconnected to daemon (${client.getConnectionMode()})`,
           );
         } else {
           vscode.window.showWarningMessage(
-            `Abbenay: Reconnect failed (${mode}). Check daemon address / TLS / token settings.`,
+            `Abbenay: Reconnect failed (${mode}). Check daemon mode / address / TLS / token settings.`,
           );
         }
       } catch (e: unknown) {

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { DaemonClient } from '../daemon/client';
 
 suite('Extension Smoke Tests', () => {
   suiteSetup(async function () {
@@ -79,8 +80,22 @@ suite('Extension Smoke Tests', () => {
     const config = vscode.workspace.getConfiguration('abbenay');
     const logLevel = config.get<string>('logLevel');
     assert.strictEqual(logLevel, 'info', 'Default logLevel should be "info"');
+    assert.strictEqual(config.get<string>('daemonMode'), 'auto');
     assert.strictEqual(config.get<string>('daemonAddress'), '');
     assert.strictEqual(config.get<boolean>('daemonTls'), true);
     assert.strictEqual(config.get<string>('daemonSslTargetName'), 'abbenay-grpc');
+  });
+
+  test('disabled daemon mode does not spawn or connect to a daemon', async () => {
+    await vscode.workspace.getConfiguration('abbenay').update('daemonMode', 'disabled', vscode.ConfigurationTarget.Global);
+
+    const client = new DaemonClient();
+    try {
+      await assert.rejects(client.connect(), /Abbenay is disabled by the abbenay\.daemonMode setting/);
+      assert.strictEqual(client.isConnected(), false);
+    } finally {
+      await client.close();
+      await vscode.workspace.getConfiguration('abbenay').update('daemonMode', 'auto', vscode.ConfigurationTarget.Global);
+    }
   });
 });
