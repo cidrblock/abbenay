@@ -30,6 +30,9 @@ let chatViewProvider: ChatViewProvider | null = null;
 let toolChangeDisposable: vscode.Disposable | null = null;
 let reconnectInFlight = false;
 let reconnectPending = false;
+let daemonConnectionSettingsWatcher: vscode.Disposable | null = null;
+let activationContext: vscode.ExtensionContext | null = null;
+let activationStartup: Promise<boolean> | null = null;
 
 /** Dashboard URL: same host as remote gRPC when configured, else localhost. */
 function resolveDashboardUrl(): string | undefined {
@@ -44,6 +47,19 @@ function resolveDashboardUrl(): string | undefined {
     return EMBEDDED_DASHBOARD_URL;
   }
   return DEFAULT_DASHBOARD_URL;
+}
+
+export async function completeDaemonStartupUnlessDisabled<T>(
+  startup: () => Promise<T>,
+  isDisabled: () => boolean,
+  rollback: (result: T) => Promise<void>,
+): Promise<T | undefined> {
+  const result = await startup();
+  if (!isDisabled()) {
+    return result;
+  }
+  await rollback(result);
+  return undefined;
 }
 
 export async function openDashboardForClient(
@@ -73,9 +89,29 @@ export async function activate(context: vscode.ExtensionContext) {
   // Set extension path for finding bundled daemon binary
   setExtensionPath(context.extensionPath);
   setDaemonSecretStorage(context.secrets);
+  activationContext = context;
   console.log('[Abbenay] extensionPath:', context.extensionPath);
 
-  await startDaemonServices(context);
+  // Listen before daemon startup so a Disabled change cancels an in-flight activation.
+  daemonConnectionSettingsWatcher = vscode.workspace.onDidChangeConfiguration(async e => {
+    if (e.affectsConfiguration('abbenay.logLevel')) {
+      updateLogLevel();
+    }
+    if (affectsDaemonConnection(e) && activationContext) {
+      await reconnectDaemonServices(activationContext);
+    }
+  });
+  context.subscriptions.push(daemonConnectionSettingsWatcher);
+
+  const startup = startDaemonServices(context);
+  activationStartup = startup;
+  try {
+    await startup;
+  } finally {
+    if (activationStartup === startup) {
+      activationStartup = null;
+    }
+  }
 
   // Register chat sidebar webview (holds singleton client reference)
   const client = getDaemonClient();
@@ -87,24 +123,15 @@ export async function activate(context: vscode.ExtensionContext) {
   // Register commands
   registerCommands(context, chatViewProvider);
 
-  // Watch for configuration changes
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(async e => {
-      if (e.affectsConfiguration('abbenay.logLevel')) {
-        updateLogLevel();
-      }
-      if (affectsDaemonConnection(e)) {
-        await reconnectDaemonServices(context);
-      }
-    }),
-  );
-
   logger.info('Abbenay Provider activated');
 }
 
 export async function deactivate() {
   const logger = getLogger();
   logger.info('Abbenay Provider deactivating...');
+  activationContext = null;
+  daemonConnectionSettingsWatcher?.dispose();
+  daemonConnectionSettingsWatcher = null;
 
   await stopDaemonServices();
 
@@ -131,6 +158,15 @@ async function startDaemonServices(
   const logger = getLogger();
   const config = readDaemonConnectionConfig();
   const mode = describeConnectionMode(config);
+  const disconnectIfDisabled = async (): Promise<boolean> => {
+    if (readDaemonConnectionConfig().mode !== 'disabled') {
+      return false;
+    }
+    await stopDaemonServices();
+    await getDaemonClient().close();
+    logger.info('[Daemon] Disabled during startup; closed the connection before registering services.');
+    return true;
+  };
   if (config.mode === 'disabled') {
     logger.info('[Daemon] Disabled by abbenay.daemonMode; skipping connection and language-model registration.');
     return false;
@@ -138,10 +174,20 @@ async function startDaemonServices(
 
   try {
     logger.info(`[Daemon] Connecting to Abbenay daemon (${mode})...`);
-    await initializeDaemon();
-    logger.info(`[Daemon] Connected and registered (${getDaemonClient().getConnectionMode()})`);
+    const initializedClient = await completeDaemonStartupUnlessDisabled(
+      () => initializeDaemon(),
+      () => readDaemonConnectionConfig().mode === 'disabled',
+      async (startedClient) => {
+        await startedClient.close();
+        logger.info('[Daemon] Disabled during startup; closed the connection before registering services.');
+      },
+    );
+    if (!initializedClient) {
+      return false;
+    }
+    logger.info(`[Daemon] Connected and registered (${initializedClient.getConnectionMode()})`);
 
-    const client = getDaemonClient();
+    const client = initializedClient;
     const healthy = await client.healthCheck();
     if (healthy) {
       logger.info('[Daemon] Health check passed');
@@ -152,6 +198,10 @@ async function startDaemonServices(
     languageModelProvider = new AbbenayLanguageModelProvider(client);
     await languageModelProvider.start();
     logger.info('[LMProvider] Language Model Provider started');
+
+    if (await disconnectIfDisabled()) {
+      return false;
+    }
 
     backchannelHandler = new BackchannelHandler(client, context);
 
@@ -240,6 +290,12 @@ async function reconnectDaemonServices(context: vscode.ExtensionContext): Promis
       logger.info('[Daemon] Connection settings changed — reconnecting...');
 
       try {
+        if (activationStartup) {
+          reconnectPending = true;
+          await activationStartup;
+          continue;
+        }
+
         await stopDaemonServices();
 
         const config = readDaemonConnectionConfig();

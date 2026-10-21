@@ -23,15 +23,15 @@ export function dashboardUrlForConnection(
     return daemonUrl;
   }
   try {
-    const reportedPort = new URL(daemonUrl).port;
+    const reportedUrl = new URL(daemonUrl);
     const remoteDashboard = dashboardUrlFromDaemonAddress(config.address);
     if (!remoteDashboard) {
       return daemonUrl;
     }
     const url = new URL(remoteDashboard);
-    if (reportedPort) {
-      url.port = reportedPort;
-    }
+    url.protocol = reportedUrl.protocol;
+    const reportedPort = reportedUrl.port || (reportedUrl.protocol === 'https:' ? '443' : '80');
+    url.port = reportedPort;
     return url.origin;
   } catch {
     return daemonUrl;

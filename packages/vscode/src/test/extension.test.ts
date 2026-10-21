@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DaemonClient } from '../daemon/client';
-import { openDashboardForClient } from '../extension';
+import { completeDaemonStartupUnlessDisabled, openDashboardForClient } from '../extension';
 import { DEFAULT_DASHBOARD_PORT, EMBEDDED_DASHBOARD_PORT, type DaemonConnectionConfig } from '../daemon/connection-config';
 
 suite('Extension Smoke Tests', () => {
@@ -91,6 +91,27 @@ suite('Extension Smoke Tests', () => {
     assert.strictEqual(config.get<string>('daemonAddress'), '');
     assert.strictEqual(config.get<boolean>('daemonTls'), true);
     assert.strictEqual(config.get<string>('daemonSslTargetName'), 'abbenay-grpc');
+  });
+
+  test('daemon startup rolls back when mode becomes Disabled before startup completes', async () => {
+    let daemonMode = 'auto';
+    let finishStartup: ((value: { id: string }) => void) | undefined;
+    let rolledBack = false;
+    const startup = completeDaemonStartupUnlessDisabled(
+      () => new Promise<{ id: string }>((resolve) => { finishStartup = resolve; }),
+      () => daemonMode === 'disabled',
+      async (client: { id: string }) => {
+        assert.strictEqual(client.id, 'daemon-client');
+        rolledBack = true;
+      },
+    );
+
+    await Promise.resolve();
+    daemonMode = 'disabled';
+    finishStartup?.({ id: 'daemon-client' });
+
+    assert.strictEqual(await startup, undefined);
+    assert.strictEqual(rolledBack, true);
   });
 
   test('dashboard opens the URL returned by the selected embedded daemon', async () => {

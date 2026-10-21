@@ -57,9 +57,9 @@ suite('connection-config', () => {
     assert.strictEqual(
       dashboardUrlForConnection(
         { isRemote: true, address: 'daemon.example:50051' },
-        'http://localhost:3000',
+        'https://localhost:3000',
       ),
-      'http://daemon.example:3000',
+      'https://daemon.example:3000',
     );
     assert.strictEqual(
       dashboardUrlForConnection(
@@ -75,9 +75,30 @@ suite('connection-config', () => {
     assert.strictEqual(
       dashboardUrlForConnection(
         { isRemote: true, address: 'daemon.example:50051' },
+        'http://localhost:80',
+      ),
+      'http://daemon.example',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: true, address: 'daemon.example:50051' },
         'http://localhost',
       ),
-      'http://daemon.example:8787',
+      'http://daemon.example',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: true, address: 'daemon.example:50051' },
+        'http://localhost:80',
+      ),
+      'http://daemon.example',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: true, address: 'daemon.example:50051' },
+        'http://localhost:3000',
+      ),
+      'http://daemon.example:3000',
     );
     assert.strictEqual(
       dashboardUrlForConnection({ isRemote: true, address: 'daemon.example:50051' }, 'not a url'),
