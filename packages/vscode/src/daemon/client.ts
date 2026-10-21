@@ -38,10 +38,11 @@ import {
   parseDaemonAddress,
   getBundledSeaBinaryName,
   getUnixDaemonAddress,
-  type DaemonMode,
 } from './runtime-paths';
+import type { DaemonMode } from './runtime-paths';
 import {
-  DaemonConnectionConfig,
+  dashboardPortForMode,
+  type DaemonConnectionConfig,
   describeConnectionMode,
   readDaemonConnectionConfig,
   resolveDaemonToken,
@@ -61,8 +62,12 @@ export {
 export {
   DAEMON_TOKEN_SECRET_KEY,
   GRPC_TLS_DEFAULT_CN,
+  DEFAULT_DASHBOARD_PORT,
+  EMBEDDED_DASHBOARD_PORT,
   affectsDaemonConnection,
   dashboardUrlFromDaemonAddress,
+  dashboardPortForMode,
+  dashboardUrlForConnection,
   describeConnectionMode,
   normalizeDaemonAddress,
   readDaemonConnectionConfig,
@@ -246,6 +251,16 @@ export class DaemonClient {
    * @param options.timeout - Timeout waiting for daemon to start (default: 15000ms)
    */
   async connect(options: { autoStart?: boolean; timeout?: number } = {}): Promise<void> {
+    const logger = getLogger();
+    const { timeout = 15000 } = options;
+    const config = readDaemonConnectionConfig();
+    this.connectionMode = describeConnectionMode(config);
+
+    if (config.mode === 'disabled') {
+      await this.disposeTransport();
+      throw new Error('Abbenay is disabled by the abbenay.daemonMode setting.');
+    }
+
     if (this.channel && this.client) {
       return; // Already connected
     }
@@ -255,15 +270,7 @@ export class DaemonClient {
       await this.closeChannelOnly();
     }
 
-    const logger = getLogger();
-    const { timeout = 15000 } = options;
-    const config = readDaemonConnectionConfig();
-    this.connectionMode = describeConnectionMode(config);
-
     try {
-      if (config.mode === 'disabled') {
-        throw new Error('Abbenay is disabled by the abbenay.daemonMode setting.');
-      }
       if (config.isRemote) {
         if (!config.address) {
           throw new Error('Remote daemon mode requires a valid `abbenay.daemonAddress` host:port.');
@@ -866,9 +873,10 @@ export class DaemonClient {
    * Start the embedded web server (dashboard) via gRPC.
    * Returns the URL to open in the browser.
    */
-  async startWebServer(port: number = 8787): Promise<proto.StartWebServerResponse> {
+  async startWebServer(port?: number): Promise<proto.StartWebServerResponse> {
     const client = this.getClient();
-    return client.startWebServer({ port });
+    const config = readDaemonConnectionConfig();
+    return client.startWebServer({ port: port ?? dashboardPortForMode(config.mode) });
   }
 
   /**

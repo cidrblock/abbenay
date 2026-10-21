@@ -6,6 +6,10 @@ import {
   describeConnectionMode,
   affectsDaemonConnection,
   dashboardUrlFromDaemonAddress,
+  dashboardUrlForConnection,
+  dashboardPortForMode,
+  DEFAULT_DASHBOARD_PORT,
+  EMBEDDED_DASHBOARD_PORT,
   GRPC_TLS_DEFAULT_CN,
   DAEMON_TOKEN_SECRET_KEY,
   DaemonConnectionConfig,
@@ -40,6 +44,27 @@ suite('connection-config', () => {
     assert.strictEqual(normalizeDaemonAddress('http://127.0.0.1:8787'), undefined);
     assert.strictEqual(normalizeDaemonAddress('127.0.0.1:8787'), undefined);
     assert.strictEqual(normalizeDaemonAddress('[::1]:8787'), undefined);
+  });
+
+  test('embedded mode uses a dashboard port distinct from the standalone daemon', () => {
+    assert.strictEqual(dashboardPortForMode('embedded'), EMBEDDED_DASHBOARD_PORT);
+    assert.notStrictEqual(EMBEDDED_DASHBOARD_PORT, DEFAULT_DASHBOARD_PORT);
+    assert.strictEqual(dashboardPortForMode('auto'), DEFAULT_DASHBOARD_PORT);
+    assert.strictEqual(dashboardPortForMode('standalone'), DEFAULT_DASHBOARD_PORT);
+  });
+
+  test('dashboardUrlForConnection preserves the selected remote daemon endpoint', () => {
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: true, address: 'daemon.example:50051' },
+        'http://localhost:8788',
+      ),
+      'http://daemon.example:8787',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection({ isRemote: false, address: undefined }, 'http://localhost:8788'),
+      'http://localhost:8788',
+    );
   });
 
   test('dashboardUrlFromDaemonAddress uses host:8787', () => {

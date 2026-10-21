@@ -25,8 +25,11 @@ suite('runtime-paths', () => {
   });
 
   test('getRuntimeDirectoryForMode isolates embedded mode and preserves other modes', () => {
-    const runtimeDir = '/run/user/1000/abbenay';
-    assert.strictEqual(getRuntimeDirectoryForMode('embedded', runtimeDir), '/run/user/1000/abbenay-embedded/abbenay');
+    const runtimeDir = path.join('/run/user/1000', 'abbenay');
+    assert.strictEqual(
+      getRuntimeDirectoryForMode('embedded', runtimeDir),
+      path.join('/run/user/1000', 'abbenay-embedded', 'abbenay'),
+    );
     assert.strictEqual(getRuntimeDirectoryForMode('auto', runtimeDir), runtimeDir);
     assert.strictEqual(getRuntimeDirectoryForMode('standalone', runtimeDir), runtimeDir);
   });

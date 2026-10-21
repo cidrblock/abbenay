@@ -7,6 +7,20 @@ import type { DaemonMode } from './runtime-paths';
 
 /** Default CN for daemon auto-generated TLS certs (matches packages/daemon grpc-tls). */
 export const GRPC_TLS_DEFAULT_CN = 'abbenay-grpc';
+export const DEFAULT_DASHBOARD_PORT = 8787;
+export const EMBEDDED_DASHBOARD_PORT = 8788;
+
+/** Select a local HTTP dashboard port that does not collide with the standalone daemon. */
+export function dashboardPortForMode(mode: DaemonMode): number {
+  return mode === 'embedded' ? EMBEDDED_DASHBOARD_PORT : DEFAULT_DASHBOARD_PORT;
+}
+
+export function dashboardUrlForConnection(
+  config: Pick<DaemonConnectionConfig, 'isRemote' | 'address'>,
+  daemonUrl: string,
+): string {
+  return config.isRemote ? dashboardUrlFromDaemonAddress(config.address) ?? daemonUrl : daemonUrl;
+}
 
 /** SecretStorage key for the consumer token (never stored in settings.json). */
 export const DAEMON_TOKEN_SECRET_KEY = 'abbenay.daemonToken';
@@ -124,7 +138,7 @@ export function dashboardUrlFromDaemonAddress(address: string | undefined): stri
   if (!host) {
     return undefined;
   }
-  return `http://${host.includes(':') ? `[${host}]` : host}:8787`;
+  return `http://${host.includes(':') ? `[${host}]` : host}:${DEFAULT_DASHBOARD_PORT}`;
 }
 
 /**

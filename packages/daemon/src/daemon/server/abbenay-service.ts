@@ -1351,6 +1351,13 @@ export function createAbbenayService(
       
       if (isWebServerRunning()) {
         const currentPort = getWebServerPort();
+        if (currentPort !== port) {
+          callback({
+            code: grpc.status.ALREADY_EXISTS,
+            message: `Dashboard is already running on port ${currentPort}, not requested port ${port}.`,
+          });
+          return;
+        }
         callback(null, {
           started: false,
           already_running: true,

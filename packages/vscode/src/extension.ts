@@ -12,13 +12,17 @@ import {
   readDaemonConnectionConfig,
   describeConnectionMode,
   dashboardUrlFromDaemonAddress,
+  dashboardUrlForConnection,
+  DEFAULT_DASHBOARD_PORT,
+  EMBEDDED_DASHBOARD_PORT,
 } from './daemon';
 import { AbbenayLanguageModelProvider } from './providers';
 import { ChatViewProvider } from './webviews/chat/ChatViewProvider';
 import { ProviderPanel } from './webviews/provider/ProviderPanel';
 
 // Default dashboard URL - daemon serves web UI here (local)
-const DEFAULT_DASHBOARD_URL = 'http://localhost:8787';
+const DEFAULT_DASHBOARD_URL = `http://localhost:${DEFAULT_DASHBOARD_PORT}`;
+const EMBEDDED_DASHBOARD_URL = `http://localhost:${EMBEDDED_DASHBOARD_PORT}`;
 
 let languageModelProvider: AbbenayLanguageModelProvider | null = null;
 let backchannelHandler: BackchannelHandler | null = null;
@@ -28,9 +32,33 @@ let reconnectInFlight = false;
 let reconnectPending = false;
 
 /** Dashboard URL: same host as remote gRPC when configured, else localhost. */
-function resolveDashboardUrl(): string {
+function resolveDashboardUrl(): string | undefined {
   const cfg = readDaemonConnectionConfig();
-  return (cfg.isRemote ? dashboardUrlFromDaemonAddress(cfg.address) : undefined) || DEFAULT_DASHBOARD_URL;
+  if (cfg.isRemote) {
+    return dashboardUrlFromDaemonAddress(cfg.address);
+  }
+  if (cfg.mode === 'disabled') {
+    return undefined;
+  }
+  if (cfg.mode === 'embedded') {
+    return EMBEDDED_DASHBOARD_URL;
+  }
+  return DEFAULT_DASHBOARD_URL;
+}
+
+export async function openDashboardForClient(
+  client: Pick<ReturnType<typeof getDaemonClient>, 'startWebServer'>,
+  openExternal: (uri: vscode.Uri) => Thenable<boolean> = vscode.env.openExternal,
+  config: ReturnType<typeof readDaemonConnectionConfig> = readDaemonConnectionConfig(),
+): Promise<string> {
+  const response = await client.startWebServer();
+  if (!response.url) {
+    throw new Error('Daemon started the web server but did not return a dashboard URL.');
+  }
+
+  const url = dashboardUrlForConnection(config, response.url);
+  await openExternal(vscode.Uri.parse(url));
+  return url;
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -261,9 +289,12 @@ function registerCommands(context: vscode.ExtensionContext, chat: ChatViewProvid
           `Sessions: ${status.activeSessions || 0}`,
         ].join('\n');
 
-        vscode.window.showInformationMessage(msg, 'Open Dashboard').then(action => {
+        vscode.window.showInformationMessage(msg, 'Open Dashboard').then(async action => {
           if (action === 'Open Dashboard') {
-            vscode.env.openExternal(vscode.Uri.parse(resolveDashboardUrl()));
+            const dashboardUrl = client.isConnected() ? await openDashboardForClient(client) : resolveDashboardUrl();
+            if (dashboardUrl) {
+              vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+            }
           }
         });
       } catch (e) {
@@ -272,9 +303,14 @@ function registerCommands(context: vscode.ExtensionContext, chat: ChatViewProvid
         vscode.window.showErrorMessage(
           `Abbenay: Cannot get daemon status (${mode}). Is the daemon running?`,
           'Open Dashboard Anyway',
-        ).then(action => {
+        ).then(async action => {
           if (action === 'Open Dashboard Anyway') {
-            vscode.env.openExternal(vscode.Uri.parse(resolveDashboardUrl()));
+            const dashboardUrl = getDaemonClient().isConnected()
+              ? await openDashboardForClient(getDaemonClient())
+              : resolveDashboardUrl();
+            if (dashboardUrl) {
+              vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+            }
           }
         });
       }
@@ -285,37 +321,27 @@ function registerCommands(context: vscode.ExtensionContext, chat: ChatViewProvid
   context.subscriptions.push(
     vscode.commands.registerCommand('abbenay.openDashboard', async () => {
       const logger = getLogger();
-      const fallbackUrl = resolveDashboardUrl();
+      const dashboardFallback = resolveDashboardUrl();
       logger.info('[Dashboard] Opening dashboard...');
 
       try {
         const client = getDaemonClient();
         if (!client.isConnected()) {
-          // Daemon not connected — open URL anyway, user may have started web manually
-          logger.warn('[Dashboard] Daemon not connected, opening URL directly');
-          vscode.env.openExternal(vscode.Uri.parse(fallbackUrl));
+          if (dashboardFallback) {
+            logger.warn('[Dashboard] Daemon not connected, opening configured dashboard URL');
+            vscode.env.openExternal(vscode.Uri.parse(dashboardFallback));
+          } else {
+            vscode.window.showWarningMessage('Abbenay is disabled. Enable it to open its dashboard.');
+          }
           return;
         }
 
-        // Send gRPC request to start the embedded web server
-        const response = await client.startWebServer(8787);
-        // Prefer host-reachable URL derived from daemonAddress over daemon-local localhost.
-        const url = fallbackUrl !== DEFAULT_DASHBOARD_URL
-          ? fallbackUrl
-          : (response.url || fallbackUrl);
-
-        if (response.alreadyRunning) {
-          logger.info(`[Dashboard] Web server already running at ${url}`);
-        } else {
-          logger.info(`[Dashboard] Web server started at ${url}`);
-        }
-
-        vscode.env.openExternal(vscode.Uri.parse(url));
+        const url = await openDashboardForClient(client);
+        logger.info(`[Dashboard] Opening daemon dashboard at ${url}`);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error(`[Dashboard] Failed to start web server: ${msg}`);
-        // Fall back to opening the URL directly
-        vscode.env.openExternal(vscode.Uri.parse(fallbackUrl));
+        vscode.window.showErrorMessage(`Abbenay: Failed to open dashboard — ${msg}`);
       }
     }),
   );
