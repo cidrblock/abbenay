@@ -290,11 +290,21 @@ function registerCommands(context: vscode.ExtensionContext, chat: ChatViewProvid
         ].join('\n');
 
         vscode.window.showInformationMessage(msg, 'Open Dashboard').then(async action => {
-          if (action === 'Open Dashboard') {
-            const dashboardUrl = client.isConnected() ? await openDashboardForClient(client) : resolveDashboardUrl();
-            if (dashboardUrl) {
-              vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+          if (action !== 'Open Dashboard') {
+            return;
+          }
+          try {
+            if (client.isConnected()) {
+              await openDashboardForClient(client);
+            } else {
+              const dashboardUrl = resolveDashboardUrl();
+              if (dashboardUrl) {
+                vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+              }
             }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Abbenay: Failed to open dashboard — ${message}`);
           }
         });
       } catch (e) {
@@ -304,13 +314,22 @@ function registerCommands(context: vscode.ExtensionContext, chat: ChatViewProvid
           `Abbenay: Cannot get daemon status (${mode}). Is the daemon running?`,
           'Open Dashboard Anyway',
         ).then(async action => {
-          if (action === 'Open Dashboard Anyway') {
-            const dashboardUrl = getDaemonClient().isConnected()
-              ? await openDashboardForClient(getDaemonClient())
-              : resolveDashboardUrl();
-            if (dashboardUrl) {
-              vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+          if (action !== 'Open Dashboard Anyway') {
+            return;
+          }
+          try {
+            const client = getDaemonClient();
+            if (client.isConnected()) {
+              await openDashboardForClient(client);
+            } else {
+              const dashboardUrl = resolveDashboardUrl();
+              if (dashboardUrl) {
+                vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
+              }
             }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Abbenay: Failed to open dashboard — ${message}`);
           }
         });
       }
