@@ -19,7 +19,23 @@ export function dashboardUrlForConnection(
   config: Pick<DaemonConnectionConfig, 'isRemote' | 'address'>,
   daemonUrl: string,
 ): string {
-  return config.isRemote ? dashboardUrlFromDaemonAddress(config.address) ?? daemonUrl : daemonUrl;
+  if (!config.isRemote) {
+    return daemonUrl;
+  }
+  try {
+    const reportedPort = new URL(daemonUrl).port;
+    const remoteDashboard = dashboardUrlFromDaemonAddress(config.address);
+    if (!remoteDashboard) {
+      return daemonUrl;
+    }
+    const url = new URL(remoteDashboard);
+    if (reportedPort) {
+      url.port = reportedPort;
+    }
+    return url.origin;
+  } catch {
+    return daemonUrl;
+  }
 }
 
 /** SecretStorage key for the consumer token (never stored in settings.json). */

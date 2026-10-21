@@ -53,17 +53,35 @@ suite('connection-config', () => {
     assert.strictEqual(dashboardPortForMode('standalone'), 0);
   });
 
-  test('dashboardUrlForConnection preserves the selected remote daemon endpoint', () => {
+  test('dashboardUrlForConnection preserves daemon-reported ports for remote and local daemons', () => {
     assert.strictEqual(
       dashboardUrlForConnection(
         { isRemote: true, address: 'daemon.example:50051' },
-        'http://localhost:8788',
+        'http://localhost:3000',
+      ),
+      'http://daemon.example:3000',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: false, address: undefined },
+        'http://localhost:3000',
+      ),
+      'http://localhost:3000',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection({ isRemote: true, address: undefined }, 'http://localhost:3000'),
+      'http://localhost:3000',
+    );
+    assert.strictEqual(
+      dashboardUrlForConnection(
+        { isRemote: true, address: 'daemon.example:50051' },
+        'http://localhost',
       ),
       'http://daemon.example:8787',
     );
     assert.strictEqual(
-      dashboardUrlForConnection({ isRemote: false, address: undefined }, 'http://localhost:8788'),
-      'http://localhost:8788',
+      dashboardUrlForConnection({ isRemote: true, address: 'daemon.example:50051' }, 'not a url'),
+      'not a url',
     );
   });
 
