@@ -42,6 +42,7 @@ import {
 import type { DaemonMode } from './runtime-paths';
 import {
   dashboardPortForMode,
+  DEFAULT_DASHBOARD_PORT,
   type DaemonConnectionConfig,
   describeConnectionMode,
   readDaemonConnectionConfig,
@@ -877,7 +878,16 @@ export class DaemonClient {
     const client = this.getClient();
     const config = readDaemonConnectionConfig();
     const requestedPort = port ?? dashboardPortForMode(config.mode);
-    return client.startWebServer({ port: requestedPort });
+    const response = await client.startWebServer({ port: requestedPort });
+    if (response.port > 0 && response.url) {
+      return response;
+    }
+    const resolvedPort = response.port || DEFAULT_DASHBOARD_PORT;
+    return {
+      ...response,
+      port: resolvedPort,
+      url: response.url || `http://localhost:${resolvedPort}`,
+    };
   }
 
   /**

@@ -9,6 +9,9 @@ import { DEFAULT_DASHBOARD_PORT, EMBEDDED_DASHBOARD_PORT, type DaemonConnectionC
 
 suite('Extension Smoke Tests', () => {
   suiteSetup(async function () {
+    // Keep persisted VS Code test settings from prior runs from changing startup behavior.
+    await vscode.workspace.getConfiguration('abbenay').update('daemonMode', 'auto', vscode.ConfigurationTarget.Global);
+
     // Activation may auto-start the bundled SEA and wait for IPC readiness.
     this.timeout(60000);
 
@@ -127,9 +130,6 @@ suite('Extension Smoke Tests', () => {
 
   test('dashboard opens the actual custom port returned by the selected daemon', async () => {
     const opened: string[] = [];
-    const config = vscode.workspace.getConfiguration('abbenay');
-    const originalMode = config.get<string>('daemonMode');
-    await config.update('daemonMode', 'standalone', vscode.ConfigurationTarget.Global);
     const standaloneConfig: DaemonConnectionConfig = {
       mode: 'standalone',
       address: undefined,
@@ -146,7 +146,7 @@ suite('Extension Smoke Tests', () => {
           started: false,
           alreadyRunning: true,
           port: customPort,
-          url: `http://localhost:${customPort}`,
+          url: '',
         }),
       },
       async (uri) => {
@@ -154,10 +154,10 @@ suite('Extension Smoke Tests', () => {
         return true;
       },
       standaloneConfig,
+      (response) => response.url || `http://localhost:${response.port}`,
     );
     assert.strictEqual(url, `http://localhost:${customPort}`);
     assert.deepStrictEqual(opened, [`http://localhost:${customPort}/`]);
-    await config.update('daemonMode', originalMode, vscode.ConfigurationTarget.Global);
   });
 
   test('dashboard failure does not fall back to the standalone dashboard URL', async () => {

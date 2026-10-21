@@ -50,14 +50,16 @@ export async function openDashboardForClient(
   client: Pick<ReturnType<typeof getDaemonClient>, 'startWebServer'>,
   openExternal: (uri: vscode.Uri) => Thenable<boolean> = vscode.env.openExternal,
   config: ReturnType<typeof readDaemonConnectionConfig> = readDaemonConnectionConfig(),
-  resolveUrl: (response: Awaited<ReturnType<typeof client.startWebServer>>) => string = response => response.url,
+  resolveUrl: (response: Awaited<ReturnType<typeof client.startWebServer>>) => string = (response) => (
+    response.url || (response.port > 0 ? `http://localhost:${response.port}` : '')
+  ),
 ): Promise<string> {
   const response = await client.startWebServer();
-  if (!response.url) {
+  const daemonUrl = resolveUrl(response);
+  if (!daemonUrl) {
     throw new Error('Daemon started the web server but did not return a dashboard URL.');
   }
 
-  const daemonUrl = resolveUrl(response);
   const url = dashboardUrlForConnection(config, daemonUrl);
   await openExternal(vscode.Uri.parse(url));
   return url;
