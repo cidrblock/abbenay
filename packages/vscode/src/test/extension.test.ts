@@ -125,6 +125,37 @@ suite('Extension Smoke Tests', () => {
     }
   });
 
+  test('dashboard opens the actual custom port returned by the selected daemon', async () => {
+    const opened: string[] = [];
+    const standaloneConfig: DaemonConnectionConfig = {
+      mode: 'standalone',
+      address: undefined,
+      isRemote: false,
+      tls: false,
+      caPath: undefined,
+      sslTargetName: 'abbenay-grpc',
+      tokenEnv: undefined,
+    };
+    const customPort = 3000;
+    const url = await openDashboardForClient(
+      {
+        startWebServer: async () => ({
+          started: false,
+          alreadyRunning: true,
+          port: customPort,
+          url: `http://localhost:${customPort}`,
+        }),
+      },
+      async (uri) => {
+        opened.push(uri.toString());
+        return true;
+      },
+      standaloneConfig,
+    );
+    assert.strictEqual(url, `http://localhost:${customPort}`);
+    assert.deepStrictEqual(opened, [`http://localhost:${customPort}/`]);
+  });
+
   test('dashboard failure does not fall back to the standalone dashboard URL', async () => {
     const opened: string[] = [];
     const embeddedConfig: DaemonConnectionConfig = {

@@ -1031,9 +1031,9 @@ describe('createAbbenayService handlers', () => {
     expect(defaultPortRequest.response?.already_running).toBe(true);
     expect(defaultPortRequest.response?.port).toBe(3000);
 
-    const conflictingPort = await invokeUnary(service.StartWebServer, { port: 3001 });
-    expect(conflictingPort.error?.code).toBe(grpc.status.ALREADY_EXISTS);
-    expect(conflictingPort.error?.message).toMatch(/already running on port 3000/);
+    const customPortRequest = await invokeUnary(service.StartWebServer, { port: 3001 });
+    expect(customPortRequest.response?.already_running).toBe(true);
+    expect(customPortRequest.response?.port).toBe(3000);
   });
 
   it('StopWebServer stops embedded server', async () => {
